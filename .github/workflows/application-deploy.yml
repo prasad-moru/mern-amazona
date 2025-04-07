@@ -1,22 +1,6 @@
 name: Application Deployment
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - 'packer/**'
-      - 'ansible/**'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - 'packer/**'
-      - 'ansible/**'
   workflow_dispatch:
     inputs:
       component:
@@ -67,84 +51,61 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y ansible
 
-    - name: Determine Component
-      id: component
+    - name: Get Component and Environment
+      id: params
       run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          echo "component=${{ github.event.inputs.component }}" >> $GITHUB_OUTPUT
-        else
-          # Auto-detect which component changed
-          if git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep -q "frontend/"; then
-            if git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep -q "backend/"; then
-              echo "component=both" >> $GITHUB_OUTPUT
-            else
-              echo "component=frontend" >> $GITHUB_OUTPUT
-            fi
-          elif git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep -q "backend/"; then
-            echo "component=backend" >> $GITHUB_OUTPUT
-          else
-            echo "component=both" >> $GITHUB_OUTPUT
-          fi
-        fi
-
-    - name: Determine Environment
-      id: environment
-      run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          echo "env_name=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-        else
-          echo "env_name=dev" >> $GITHUB_OUTPUT
-        fi
+        echo "component=${{ github.event.inputs.component }}" >> $GITHUB_OUTPUT
+        echo "env_name=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
 
     - name: Build Frontend with Packer
-      if: steps.component.outputs.component == 'frontend' || steps.component.outputs.component == 'both'
+      if: steps.params.outputs.component == 'frontend' || steps.params.outputs.component == 'both'
       run: |
         cd packer
         packer build -var "aws_region=us-east-1" \
-                    -var "environment=${{ steps.environment.outputs.env_name }}" \
+                    -var "environment=${{ steps.params.outputs.env_name }}" \
                     frontend.json
 
     - name: Build Backend with Packer
-      if: steps.component.outputs.component == 'backend' || steps.component.outputs.component == 'both'
+      if: steps.params.outputs.component == 'backend' || steps.params.outputs.component == 'both'
       run: |
         cd packer
         packer build -var "aws_region=us-east-1" \
-                    -var "environment=${{ steps.environment.outputs.env_name }}" \
+                    -var "environment=${{ steps.params.outputs.env_name }}" \
                     backend.json
 
     - name: Update Launch Template
-      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
       run: |
-        # Get the AMI ID from the Packer build
-        if [ "${{ steps.component.outputs.component }}" == "frontend" ] || [ "${{ steps.component.outputs.component }}" == "both" ]; then
+        # Update frontend if selected
+        if [ "${{ steps.params.outputs.component }}" == "frontend" ] || [ "${{ steps.params.outputs.component }}" == "both" ]; then
           FRONTEND_AMI_ID=$(cat packer/manifest-frontend.json | jq -r '.builds[-1].artifact_id' | cut -d':' -f2)
           
           # Update the tfvars file with the new AMI ID
-          sed -i "s/frontend_ami_id = .*/frontend_ami_id = \"$FRONTEND_AMI_ID\"/" terraform/environments/${{ steps.environment.outputs.env_name }}/terraform.tfvars
+          sed -i "s/frontend_ami_id = .*/frontend_ami_id = \"$FRONTEND_AMI_ID\"/" terraform/environments/${{ steps.params.outputs.env_name }}/terraform.tfvars
           
           # Apply the Terraform changes
-          cd terraform/environments/${{ steps.environment.outputs.env_name }}
+          cd terraform/environments/${{ steps.params.outputs.env_name }}
           terraform init
           terraform apply -auto-approve -target=module.asg.aws_launch_template.frontend
         fi
         
-        if [ "${{ steps.component.outputs.component }}" == "backend" ] || [ "${{ steps.component.outputs.component }}" == "both" ]; then
+        # Update backend if selected
+        if [ "${{ steps.params.outputs.component }}" == "backend" ] || [ "${{ steps.params.outputs.component }}" == "both" ]; then
           BACKEND_AMI_ID=$(cat packer/manifest-backend.json | jq -r '.builds[-1].artifact_id' | cut -d':' -f2)
           
           # Update the tfvars file with the new AMI ID
-          sed -i "s/backend_ami_id = .*/backend_ami_id = \"$BACKEND_AMI_ID\"/" terraform/environments/${{ steps.environment.outputs.env_name }}/terraform.tfvars
+          sed -i "s/backend_ami_id = .*/backend_ami_id = \"$BACKEND_AMI_ID\"/" terraform/environments/${{ steps.params.outputs.env_name }}/terraform.tfvars
           
           # Apply the Terraform changes
-          cd terraform/environments/${{ steps.environment.outputs.env_name }}
+          cd terraform/environments/${{ steps.params.outputs.env_name }}
           terraform init
           terraform apply -auto-approve -target=module.ec2.aws_instance.backend
         fi
 
     - name: Refresh Auto Scaling Group
-      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (steps.component.outputs.component == 'frontend' || steps.component.outputs.component == 'both')
+      if: steps.params.outputs.component == 'frontend' || steps.params.outputs.component == 'both'
       run: |
         # Get the ASG name
-        cd terraform/environments/${{ steps.environment.outputs.env_name }}
+        cd terraform/environments/${{ steps.params.outputs.env_name }}
         ASG_NAME=$(terraform output -raw frontend_asg_name)
         
         # Start instance refresh
