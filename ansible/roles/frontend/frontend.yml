@@ -1,0 +1,12 @@
+---
+# ansible/frontend.yml
+- name: Setup React Frontend Server
+  hosts: all
+  become: yes
+  vars:
+    app_dir: /opt/mern-app/frontend
+    nginx_conf_dir: /etc/nginx/sites-available
+    env: "{{ env | default('dev') }}"
+
+  roles:
+    - frontend

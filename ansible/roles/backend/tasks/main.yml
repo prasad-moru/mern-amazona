@@ -1,0 +1,56 @@
+---
+# ansible/roles/backend/tasks/main.yml
+- name: Create application directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: 0755
+
+- name: Copy backend application
+  copy:
+    src: /tmp/setup/
+    dest: "{{ app_dir }}"
+    owner: ubuntu
+    group: ubuntu
+    mode: 0755
+    remote_src: yes
+
+- name: Install npm dependencies
+  npm:
+    path: "{{ app_dir }}"
+    state: present
+  become: yes
+  become_user: ubuntu
+
+- name: Create environment file
+  template:
+    src: env.j2
+    dest: "{{ app_dir }}/.env.{{ env }}"
+    owner: ubuntu
+    group: ubuntu
+    mode: 0600
+
+- name: Setup PM2 ecosystem file
+  template:
+    src: ecosystem.config.js.j2
+    dest: "{{ app_dir }}/ecosystem.config.js"
+    owner: ubuntu
+    group: ubuntu
+    mode: 0644
+
+- name: Setup systemd service file
+  template:
+    src: mern-backend.service.j2
+    dest: /etc/systemd/system/mern-backend.service
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Enable and start backend service
+  systemd:
+    name: mern-backend
+    enabled: yes
+    state: started
+    daemon_reload: yes

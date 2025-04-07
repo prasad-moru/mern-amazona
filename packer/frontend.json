@@ -1,0 +1,77 @@
+{
+    "variables": {
+      "aws_region": "us-east-1",
+      "environment": "dev",
+      "ami_name_prefix": "mern-app-frontend",
+      "instance_type": "t3.micro",
+      "ssh_username": "ubuntu"
+    },
+    "builders": [
+      {
+        "type": "amazon-ebs",
+        "region": "{{user `aws_region`}}",
+        "source_ami_filter": {
+          "filters": {
+            "virtualization-type": "hvm",
+            "name": "ubuntu/images/*ubuntu-focal-20.04-amd64-server-*",
+            "root-device-type": "ebs"
+          },
+          "owners": ["099720109477"],
+          "most_recent": true
+        },
+        "instance_type": "{{user `instance_type`}}",
+        "ssh_username": "{{user `ssh_username`}}",
+        "ami_name": "{{user `ami_name_prefix`}}-{{user `environment`}}-{{timestamp}}",
+        "ami_description": "MERN Stack Frontend Server AMI for {{user `environment`}} environment",
+        "tags": {
+          "Name": "{{user `ami_name_prefix`}}-{{user `environment`}}",
+          "Environment": "{{user `environment`}}",
+          "Component": "frontend",
+          "ManagedBy": "Packer"
+        }
+      }
+    ],
+    "provisioners": [
+      {
+        "type": "shell",
+        "inline": [
+          "echo 'Updating system packages...'",
+          "sudo apt-get update",
+          "sudo apt-get upgrade -y",
+          "sudo apt-get install -y nginx git nodejs npm",
+          "sudo npm install -g n",
+          "sudo n stable",
+          "sudo npm install -g pm2",
+          "mkdir -p /tmp/setup"
+        ]
+      },
+      {
+        "type": "file",
+        "source": "frontend/",
+        "destination": "/tmp/setup/"
+      },
+      {
+        "type": "ansible",
+        "playbook_file": "ansible/frontend.yml",
+        "extra_arguments": [
+          "-e", "env={{user `environment`}}"
+        ]
+      },
+      {
+        "type": "shell",
+        "inline": [
+          "sudo systemctl enable nginx",
+          "echo 'Cleaning up...'",
+          "sudo apt-get clean",
+          "rm -rf /tmp/setup"
+        ]
+      }
+    ],
+    "post-processors": [
+      {
+        "type": "manifest",
+        "output": "manifest-frontend.json",
+        "strip_path": true
+      }
+    ]
+  }
