@@ -1,317 +1,476 @@
-# MERN AMAZONA
+# MERN Stack Three-Tier Architecture on AWS
 
-![amazona](/frontend/public/images/amazona.jpg)
+This documentation covers the implementation of a three-tier architecture for a MERN (MongoDB, Express.js, React.js, Node.js) stack application on AWS using Terraform as Infrastructure as Code (IaC). The implementation includes deployment automation with Packer and Ansible.
 
-# React Tutorial - Build ECommerce in 6 Hours [2022]
+## Table of Contents
 
-Welcome to my React and Node tutorial to build a fully-functional e-commerce website exactly like amazon. Open your code editor and follow me for the next hours to build an e-commerce website using MERN stack (MongoDB, ExpressJS, React and Node.JS).
+1. [Architecture Overview](#architecture-overview)
+2. [Infrastructure Components](#infrastructure-components)
+3. [Terraform Module Structure](#terraform-module-structure)
+4. [Infrastructure Deployment](#infrastructure-deployment)
+5. [Application Deployment](#application-deployment)
+6. [Environment Management](#environment-management)
+7. [Security Considerations](#security-considerations)
+8. [Monitoring and Logging](#monitoring-and-logging)
+9. [Backup and Recovery](#backup-and-recovery)
+10. [Cost Optimization](#cost-optimization)
+11. [Troubleshooting](#troubleshooting)
+12. [Maintenance Procedures](#maintenance-procedures)
 
-Watch it on Youtube:
-[https://www.youtube.com/watch?v=CDtPMR5y0QU](https://www.youtube.com/watch?v=CDtPMR5y0QU)
+## Architecture Overview
 
-## Demo Website
+The implementation follows a standard three-tier architecture:
 
-- 👉 Render : [https://amazona.onrender.com](https://amazona.onrender.com)
+1. **Presentation Tier (Frontend)**
+   - React.js application
+   - Hosted on EC2 instances within an Auto Scaling Group
+   - Fronted by an Application Load Balancer
+   - Located in private subnets
 
-## You Will Learn
+2. **Application Tier (Backend)**
+   - Node.js API application
+   - Hosted on EC2 instances
+   - Located in private subnets
 
-- HTML5 and CSS3: Semantic Elements, CSS Grid, Flexbox
-- React: Components, Props, Events, Hooks, Router, Axios
-- Context API: Store, Reducers, Actions
-- Node & Express: Web API, Body Parser, File Upload, JWT
-- MongoDB: Mongoose, Aggregation
-- Development: ESLint, Babel, Git, Github,
-- Deployment: Heroku
+3. **Data Tier (Database)**
+   - AWS DocumentDB (MongoDB-compatible)
+   - Located in private subnets
 
-## Run Locally
+### Network Architecture
 
-### 1. Clone repo
+- VPC with CIDR range suitable for a mid-sized organization
+- 2 public subnets across different Availability Zones
+- 2 private subnets across different Availability Zones
+- Internet Gateway for internet access from public subnets
+- NAT Gateway for outbound internet access from private subnets
+- Route tables for proper traffic management
+
+### Access Management
+
+- OpenVPN server deployed on an EC2 instance in a public subnet
+- Used for secure administrative access to resources in private subnets
+
+## Infrastructure Components
+
+### VPC Module
+- **CIDR Range**: 10.0.0.0/16
+- **Public Subnets**: 10.0.1.0/24, 10.0.2.0/24
+- **Private Subnets**: 10.0.10.0/24, 10.0.20.0/24
+- **Internet Gateway**: Provides internet access
+- **NAT Gateway**: Enables outbound internet access for private resources
+- **Route Tables**: One for public subnets, one for private subnets
+
+### EC2 Instances Module
+- **Frontend Instance**: Hosts React.js application
+  - Located in a private subnet
+  - Security group restricts access to ALB only
+  - No public IP address
+- **Backend Instance**: Hosts Node.js application
+  - Located in a private subnet
+  - Security group restricts access to frontend instances only
+  - No public IP address
+
+### Auto Scaling Group Module
+- **Launch Template**: Configuration for frontend instances
+- **Auto Scaling Group**: Dynamically adjusts capacity
+- **Scaling Policies**: Based on CPU utilization
+- **CloudWatch Alarms**: Triggers scaling actions
+
+### Application Load Balancer Module
+- **ALB**: Distributes traffic to frontend servers
+- **Target Group**: Routes requests to backend instances
+- **Listeners**: HTTP (port 80) and optional HTTPS (port 443)
+- **Security Group**: Allows incoming HTTP/HTTPS traffic
+
+### DocumentDB Module
+- **Cluster**: MongoDB-compatible database service
+- **Instances**: Configurable number of instances
+- **Subnet Group**: Uses private subnets
+- **Parameter Group**: Custom configuration settings
+- **Security Group**: Restricts access to backend instances only
+
+### OpenVPN Module
+- **EC2 Instance**: Hosts OpenVPN server
+- **Security Group**: Allows VPN traffic
+- **User Configuration**: Sets up two free users
+- **Shell Script**: Automated setup via Terraform provisioner
+
+## Terraform Module Structure
 
 ```
-$ git clone git@github.com:basir/mern-amazona.git
-$ cd mern-amazona
+terraform/
+├── modules/
+│   ├── vpc/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   ├── ec2/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   ├── asg/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   ├── alb/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   ├── documentdb/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   └── openvpn/
+│       ├── main.tf
+│       ├── variables.tf
+│       └── outputs.tf
+├── environments/
+│   ├── dev/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   └── terraform.tfvars
+│   ├── staging/
+│   │   ├── ...
+│   └── prod/
+│       ├── ...
 ```
 
-### 2. Create .env File
+## Infrastructure Deployment
 
-- duplicate .env.example in backend folder and rename it to .env
+### Prerequisites
 
-### 3. Setup MongoDB
+1. AWS Account with appropriate permissions
+2. Terraform v1.5.0 or later
+3. AWS CLI configured with proper credentials
+4. S3 bucket for Terraform state
+5. DynamoDB table for state locking
 
-- Local MongoDB
-  - Install it from [here](https://www.mongodb.com/try/download/community)
-  - In .env file update MONGODB_URI=mongodb://localhost/amazona
-- OR Atlas Cloud MongoDB
-  - Create database at [https://cloud.mongodb.com](https://cloud.mongodb.com)
-  - In .env file update MONGODB_URI=mongodb+srv://your-db-connection
+### Deployment Steps
 
-### 4. Run Backend
+1. **Initialize the Environment**:
+   ```bash
+   cd terraform/environments/dev
+   terraform init
+   ```
 
-```
-$ cd backend
-$ npm install
-$ npm start
-```
+2. **Create a Workspace** (optional):
+   ```bash
+   terraform workspace new dev
+   ```
 
-### 5. Run Frontend
+3. **Review the Plan**:
+   ```bash
+   terraform plan
+   ```
 
-```
-# open new terminal
-$ cd frontend
-$ npm install
-$ npm start
-```
+4. **Apply the Configuration**:
+   ```bash
+   terraform apply
+   ```
 
-### 6. Seed Users and Products
+5. **Verify Deployment**:
+   - Check AWS Console for created resources
+   - Confirm connectivity via OpenVPN
+   - Verify ALB is accessible
 
-- Run this on browser: http://localhost:5000/api/seed
-- It returns admin email and password and 6 sample products
+### Automated Deployment with GitHub Actions
 
-### 7. Admin Login
+A GitHub Actions workflow is configured to automate the deployment process:
 
-- Run http://localhost:3000/signin
-- Enter admin email and password and click signin
+1. **Workflow File**: `.github/workflows/terraform-deploy.yml`
+2. **Trigger Events**:
+   - Push to main branch
+   - Pull request to main branch
+   - Manual workflow dispatch
+3. **Environment Variables**:
+   - AWS credentials from GitHub Secrets
+   - Database password from GitHub Secrets
+4. **Job Steps**:
+   - Checkout repository
+   - Setup Terraform
+   - Determine environment
+   - Initialize Terraform
+   - Check formatting
+   - Validate configuration
+   - Generate and review plan
+   - Apply configuration (if on main branch)
 
-## Support
+## Application Deployment
 
-- Contact Instructor: [Basir](mailto:basir.jafarzadeh@gmail.com)
+The application deployment uses a combination of Packer and Ansible to create golden AMIs and configure the instances.
 
-# Lessons
+### Packer Templates
 
-1. Introduction
-2. Install Tools
-3. Create React App
-4. Create Git Repository
-5. List Products
-   1. create products array
-   2. add product images
-   3. render products
-   4. style products
-6. Add page routing
-   1. npm i react-router-dom
-   2. create route for home screen
-   3. create router for product screen
-7. Create Node.JS Server
-   1. run npm init in root folder
-   2. Update package.json set type: module
-   3. Add .js to imports
-   4. npm install express
-   5. create server.js
-   6. add start command as node backend/server.js
-   7. require express
-   8. create route for / return backend is ready.
-   9. move products.js from frontend to backend
-   10. create route for /api/products
-   11. return products
-   12. run npm start
-8. Fetch Products From Backend
-   1. set proxy in package.json
-   2. npm install axios
-   3. use state hook
-   4. use effect hook
-   5. use reducer hook
-9. Manage State By Reducer Hook
-   1. define reducer
-   2. update fetch data
-   3. get state from usReducer
-10. Add bootstrap UI Framework
-    1. npm install react-bootstrap bootstrap
-    2. update App.js
-11. Create Product and Rating Component
-    1. create Rating component
-    2. Create Product component
-    3. Use Rating component in Product component
-12. Create Product Details Screen
-    1. fetch product from backend
-    2. create 3 columns for image, info and action
-13. Create Loading and Message Component
-    1. create loading component
-    2. use spinner component
-    3. craete message component
-    4. create utils.js to define getError fuction
-14. Create React Context For Add Item To Cart
-    1. Create React Context
-    2. define reducer
-    3. create store provider
-    4. implement add to cart button click handler
-15. Complete Add To Cart
-    1. check exist item in the cart
-    2. check count in stock in backend
-16. Create Cart Screen
-    1. create 2 columns
-    2. display items list
-    3. create action column
-17. Complete Cart Screen
-    1. click handler for inc/dec item
-    2. click handler for remove item
-    3. click handler for checkout
-18. Create Signin Screen
-    1. create sign in form
-    2. add email and password
-    3. add signin button
-19. Connect To MongoDB Database
-    1. create atlas monogodb database
-    2. install local mongodb database
-    3. npm install mongoose
-    4. connect to mongodb database
-20. Seed Sample Products
-    1. create Product model
-    2. create seed route
-    3. use route in server.js
-    4. seed sample product
-21. Seed Sample Users
-    1. create user model
-    2. seed sample users
-22. Create Signin Backend API
-    1. create signin api
-    2. npm install jsonwebtoken
-    3. define generateToken
-23. Complete Signin Screen
-    1. handle submit action
-    2. save token in store and local storage
-    3. show user name in header
-24. Create Shipping Screen
-    1. create form inputs
-    2. handle save shipping address
-    3. add checkout wizard bar
-25. Create Sign Up Screen
-    1. create input forms
-    2. handle submit
-    3. create backend api
-26. Implement Select Payment Method Screen
-    1. create input forms
-    2. handle submit
-27. Create Place Order Screen
-    1. show cart items, payment and address
-    2. calculate order summary
-28. Implement Place Order Action
-    1. handle place order action
-    2. create order create api
-29. Create Order Screen
-    1. create backend api for order/:id
-    2. fetch order api in frontend
-    3. show order information in 2 cloumns
-30. Pay Order By PayPal
-    1. generate paypal client id
-    2. create api to return client id
-    3. install react-paypal-js
-    4. use PayPalScriptProvider in index.js
-    5. use usePayPalScriptReducer in Order Screen
-    6. implement loadPaypalScript function
-    7. render paypal button
-    8. implement onApprove payment function
-    9. create pay order api in backend
-31. Display Order History
-    1. create order screen
-    2. create order history api
-    3. use api in the frontend
-32. Create Profile Screen
-    1. get user info from context
-    2. show user information
-    3. create user update api
-    4. update user info
-33. Publish To Heroku
-    1. create and config node project
-    2. serve build folder in frontend folder
-    3. Create heroku account
-    4. connect it to github
-    5. Create mongodb atlas database
-    6. Set database connection in heroku env variables
-    7. Commit and push
-34. Add Sidebar and Search Box
-    1. add sidebar
-    2. add search box
-35. Create Search Screen
-    1. show filters
-    2. create api for searching products
-    3. display results
-36. Create Admin Menu
-    1. define protected route component
-    2. define admin route component
-    3. add menu for admin in header
-37. Create Dashboard Screen
-    1. create dashboard ui
-    2. implement backend api
-    3. connect ui to backend
-38. Manage Products
-    1. create products list ui
-    2. implement backend api
-    3. fetch data
-39. Create Product
-    1. create products button
-    2. implement backend api
-    3. handle on click
-40. Create Edit Product
-    1. create edit button
-    2. create edit product ui
-    3. dispaly product info in the input boxes
-41. Implement Update Product
-    1. create edit product backend api
-    2. handle update click
-42. Upload Product Image
-    1. create cloudinary account
-    2. use the api key in env file
-    3. handle upload file
-    4. implement backend api to upload
-43. Delete Product
-    1. show delete button
-    2. implement backend api
-    3. handle on click
-44. List Orders
-    1. create order list screen
-    2. implement backen api
-    3. fetch and display orders
-45. Deliver Order
-    1. add deliver button
-    2. handle click action
-    3. implement backen api for deliver
-46. Delete Order
-    1. add delete button
-    2. handle click action
-    3. implement backen api for delete
-47. List Users
-    1. create user list screen
-    2. implement backen api
-    3. fetch and display users
-48. Edit User
-    1. create edit button
-    2. create edit product ui
-    3. dispaly product info in the input boxes
-    4. implement backend api
-    5. handle edit click
-49. Delete User
-    1. add delete button
-    2. handle click action
-    3. implement backen api for delete
-50. Choose Address On Google Map
-    1. create google map credentials
-    2. update .env file with Google Api Key
-    3. create api to send google api to frontend
-    4. create map screen
-    5. fetch google api
-    6. getUserLocation
-    7. install @react-google-maps/api
-    8. use it in shipping screen
-    9. apply map to the checkout screen
-51. Email order receipt by mailgun
-    1. create mailgun account
-    2. add and verify your domain to mailgun
-    3. install mailgun-js
-    4. set api key in env file
-    5. change pay order in orderRouter
-    6. send email order receipt
-52. Review Products
-    1. create submit review form
-    2. handle submit
-    3. implement backend api for review
-53. Upload multiple Images
-    1. add images to product model
-    2. get images in edit screen
-    3. show images in product screen
-54. Upgrade To React 18
-    1. install node-check-updates
-    2. ncu -u
-    3. remove package-lock.json
-    4. npm install
-    5. replace render with createRoot
-    6. fix LinkContainer error
+1. **Frontend Template**: `packer/frontend.json`
+   - Builds from Ubuntu 20.04 base AMI
+   - Installs Nginx, Node.js, and other dependencies
+   - Copies application code
+   - Runs Ansible for configuration
+
+2. **Backend Template**: `packer/backend.json`
+   - Builds from Ubuntu 20.04 base AMI
+   - Installs Node.js and MongoDB clients
+   - Copies application code
+   - Runs Ansible for configuration
+
+### Ansible Roles
+
+1. **Frontend Role**:
+   - Installs and configures Nginx
+   - Builds React application
+   - Sets up environment files
+   - Configures service startup
+
+2. **Backend Role**:
+   - Installs and configures Node.js
+   - Sets up environment files
+   - Configures PM2 for process management
+   - Sets up systemd service
+
+### Automated Deployment with GitHub Actions
+
+A GitHub Actions workflow is configured to automate the application deployment:
+
+1. **Workflow File**: `.github/workflows/application-deploy.yml`
+2. **Trigger Events**:
+   - Push to main branch with changes in application directories
+   - Pull request to main branch
+   - Manual workflow dispatch
+3. **Job Steps**:
+   - Checkout repository
+   - Setup Node.js
+   - Install Packer and Ansible
+   - Determine which component to deploy
+   - Build AMIs with Packer
+   - Update Launch Templates
+   - Refresh Auto Scaling Group instances
+
+## Environment Management
+
+### Environment Separation
+
+The infrastructure is designed to support multiple environments (dev, staging, prod) using:
+
+1. **Terraform Workspaces**:
+   - Separate workspace for each environment
+   - Environment-specific state files
+
+2. **Environment-Specific Variables**:
+   - Different `terraform.tfvars` files for each environment
+   - Environment-specific configurations
+
+3. **Resource Naming**:
+   - Environment name included in resource names
+   - Tags for easy identification
+
+### Environment-Specific Configurations
+
+1. **Development**:
+   - Smaller instance types
+   - Fewer instances
+   - Simplified security requirements
+   - No HTTPS requirement
+
+2. **Staging**:
+   - Similar to production but smaller scale
+   - Configured for testing new features
+   - May have additional monitoring
+
+3. **Production**:
+   - Larger instances
+   - More instances for redundancy
+   - Strict security settings
+   - HTTPS required
+   - Full backup and monitoring
+
+## Security Considerations
+
+### Network Security
+
+1. **VPC Isolation**:
+   - Private subnets for all application components
+   - Public subnets only for load balancers and VPN
+
+2. **Security Groups**:
+   - Principle of least privilege
+   - Limited access between tiers
+   - No direct public access to private resources
+
+3. **Access Control**:
+   - OpenVPN for administrative access
+   - SSH access restricted to VPN users
+   - No direct SSH access from the internet
+
+### Data Security
+
+1. **Data Encryption**:
+   - DocumentDB storage encryption
+   - HTTPS for data in transit
+   - Secure environment variables
+
+2. **Authentication**:
+   - IAM roles for EC2 instances
+   - Strong database credentials
+   - JWT for API authentication
+
+### Compliance
+
+1. **Logging**:
+   - VPC Flow Logs
+   - CloudTrail for API activity
+   - Application logs centralized
+
+2. **Monitoring**:
+   - CloudWatch Alarms
+   - Resource utilization tracking
+   - Security event notifications
+
+## Monitoring and Logging
+
+### CloudWatch Integration
+
+1. **Metrics**:
+   - EC2 instance metrics
+   - ALB metrics
+   - DocumentDB metrics
+   - Custom application metrics
+
+2. **Alarms**:
+   - CPU utilization alarms for scaling
+   - Error rate alarms
+   - Latency alarms
+
+3. **Logs**:
+   - Application logs
+   - Access logs
+   - System logs
+   - Database logs
+
+### Dashboards
+
+Recommended CloudWatch dashboards for monitoring:
+
+1. **Infrastructure Dashboard**:
+   - EC2 instances health
+   - ALB statistics
+   - Database performance
+   - Network traffic
+
+2. **Application Dashboard**:
+   - API response times
+   - Error rates
+   - User activity
+   - Business metrics
+
+## Backup and Recovery
+
+### Database Backup
+
+1. **Automated Backups**:
+   - DocumentDB automated snapshots
+   - Configurable retention period
+
+2. **Manual Snapshots**:
+   - Before major changes
+   - For long-term retention
+
+### AMI Management
+
+1. **Golden AMI Strategy**:
+   - Versioned AMIs created with Packer
+   - Previous AMIs retained for rollback
+
+2. **Disaster Recovery**:
+   - Cross-region AMI copies
+   - Recovery procedures documented
+
+## Cost Optimization
+
+### Resource Optimization
+
+1. **Right-Sizing**:
+   - Instance types appropriate for workload
+   - Auto Scaling to match demand
+
+2. **Reserved Instances**:
+   - For predictable workloads
+   - Significant savings for long-term usage
+
+### Monitoring Costs
+
+1. **AWS Cost Explorer**:
+   - Regular review of costs
+   - Identify cost anomalies
+
+2. **Budgets and Alerts**:
+   - Set budget thresholds
+   - Alerts for unexpected spending
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Connectivity Problems**:
+   - Check security groups
+   - Verify route tables
+   - Confirm VPN is working
+
+2. **Application Errors**:
+   - Check application logs
+   - Verify environment variables
+   - Test database connectivity
+
+3. **Deployment Failures**:
+   - Review GitHub Actions logs
+   - Check Terraform state
+   - Verify AWS permissions
+
+### Diagnostic Procedures
+
+1. **SSH Access via VPN**:
+   - Connect to OpenVPN
+   - SSH to instances for direct inspection
+   - Check service status
+
+2. **Log Analysis**:
+   - Access CloudWatch Logs
+   - Review application logs
+   - Check system logs
+
+## Maintenance Procedures
+
+### Regular Maintenance
+
+1. **System Updates**:
+   - OS patches via new AMIs
+   - Dependency updates
+   - Security patches
+
+2. **Database Maintenance**:
+   - Performance optimization
+   - Index management
+   - Storage management
+
+### Scaling Procedures
+
+1. **Vertical Scaling**:
+   - Change instance types
+   - Update Launch Templates
+   - Refresh instances
+
+2. **Horizontal Scaling**:
+   - Adjust Auto Scaling group parameters
+   - Add database instances
+   - Update load balancer configuration
+
+### Backup Verification
+
+1. **Regular Testing**:
+   - Restore database from backup
+   - Deploy from AMI backups
+   - Verify application functionality
+
+## Conclusion
+
+This documentation provides a comprehensive guide to the MERN stack three-tier architecture implemented on AWS using Terraform. The modular approach allows for easy maintenance, scaling, and adaptation to changing requirements. The combination of infrastructure as code, golden AMIs, and automated deployment pipelines ensures consistent, reliable, and efficient operations.
