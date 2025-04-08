@@ -1,0 +1,135 @@
+# roles/backend/defaults/main.yml
+---
+# Default variables that can be overridden
+node_version: "16.x"
+app_port: 4000
+app_env: "production"
+
+# roles/backend/handlers/main.yml
+---
+- name: restart backend
+  shell: |
+    cd {{ app_dir }} && pm2 restart all || (pm2 start npm --name "backend" -- start && pm2 save)
+  become: yes
+  become_user: ubuntu
+
+# roles/backend/tasks/main.yml
+---
+- name: Include install tasks
+  include_tasks: install.yml
+
+- name: Include configuration tasks
+  include_tasks: config.yml
+
+- name: Include deployment tasks
+  include_tasks: deploy.yml
+
+# roles/backend/tasks/install.yml
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install required packages
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - git
+    - curl
+    - software-properties-common
+
+- name: Install Node.js repository
+  shell: |
+    curl -fsSL https://deb.nodesource.com/setup_{{ node_version }} | bash -
+  args:
+    creates: /etc/apt/sources.list.d/nodesource.list
+
+- name: Install Node.js
+  apt:
+    name: nodejs
+    state: present
+    update_cache: yes
+
+- name: Install PM2 globally
+  npm:
+    name: pm2
+    global: yes
+    state: present
+
+# roles/backend/tasks/config.yml
+---
+- name: Create application directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Create .env file
+  template:
+    src: env.j2
+    dest: "{{ app_dir }}/.env"
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'
+  notify: restart backend
+
+# roles/backend/tasks/deploy.yml
+---
+- name: Clean application directory if requested
+  file:
+    path: "{{ app_dir }}"
+    state: absent
+  when: clean_deploy | default(false) | bool
+
+- name: Create application directory if needed
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Clone/update repository
+  git:
+    repo: "{{ github_repo }}"
+    dest: "{{ app_dir }}"
+    version: "{{ git_branch }}"
+    update: yes
+    force: yes
+  become: yes
+  become_user: ubuntu
+  register: git_status
+
+- name: Create .env file
+  template:
+    src: env.j2
+    dest: "{{ app_dir }}/.env"
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'
+  notify: restart backend
+
+- name: Install npm dependencies
+  npm:
+    path: "{{ app_dir }}"
+    state: present
+  become: yes
+  become_user: ubuntu
+  when: git_status.changed
+
+- name: Start/restart PM2 application
+  shell: |
+    cd {{ app_dir }} && pm2 delete all || true && pm2 start npm --name "backend" -- start && pm2 save && pm2 startup
+  become: yes
+  become_user: ubuntu
+  when: git_status.changed
+
+- name: Save PM2 process list and generate startup script
+  shell: |
+    cd {{ app_dir }} && pm2 save && pm2 startup | tail -n 1 | bash
+  become: yes
+  when: git_status.changed

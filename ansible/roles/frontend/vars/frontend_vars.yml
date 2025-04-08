@@ -1,0 +1,28 @@
+# vars/frontend_vars.yml
+---
+github_repo: "https://github.com/your-org/amazona-frontend.git"
+git_branch: "main"
+app_dir: "/var/www/amazona-frontend"
+node_version: "16.x"
+nginx_conf_path: "/etc/nginx/sites-available/amazona-frontend"
+nginx_enabled_path: "/etc/nginx/sites-enabled/amazona-frontend"
+app_port: 3000  # React's default dev port
+server_name: "yourdomain.com"  # Your frontend domain
+
+# vars/backend_vars.yml
+---
+github_repo: "https://github.com/your-org/amazona-backend.git"
+git_branch: "main"
+app_dir: "/var/www/amazona-backend"
+node_version: "16.x"
+app_port: 4000  # Backend port from your server.js
+env:
+  JWT_SECRET: "somethingsecret"
+  MONGODB_URI: "mongodb://<user>:<password>@your-docdb-url:27017/amazona"
+  PAYPAL_CLIENT_ID: "your-paypal-client-id"
+  CLOUDINARY_CLOUD_NAME: "your-cloud-name"
+  CLOUDINARY_API_KEY: "your-api-key"
+  CLOUDINARY_API_SECRET: "your-api-secret"
+  GOOGLE_API_KEY: "your-google-api-key"
+  MAILGUN_DOMIAN: "your-mailgun-domain"
+  MAILGUN_API_KEY: "your-mailgun-api-key"

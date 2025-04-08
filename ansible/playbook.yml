@@ -1,0 +1,18 @@
+---
+# playbook.yml - Main playbook that will execute both frontend and backend roles
+
+- name: Configure Frontend Server
+  hosts: frontend
+  become: true
+  vars_files:
+    - vars/frontend_vars.yml
+  roles:
+    - frontend
+
+- name: Configure Backend Server
+  hosts: backend
+  become: true
+  vars_files:
+    - vars/backend_vars.yml
+  roles:
+    - backend
