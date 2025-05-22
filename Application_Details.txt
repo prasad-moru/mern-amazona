@@ -1,0 +1,10 @@
+mern application
+
+FrontEnd = React
+
+Backent = Node Js
+
+Database = MongoDB
+
+FrontEnd Serving with Nginx
+

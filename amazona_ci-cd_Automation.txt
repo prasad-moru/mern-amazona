@@ -1,0 +1,11 @@
+1. create one ec2 instance(ubuntu 24.04LTS) for Frontend App. install dependencies with shell script. Make Front end Golden AMI. 
+     a)Create Ansible Role 
+
+
+2. Create one ec2 instance(ubuntu 24.04LTS) for BackeEnd App. installe dependencies with Shell Script. Make Back End Golden AMI.
+
+      a)Create Ansible Role 
+
+
+3. Document DB for Database.
+
