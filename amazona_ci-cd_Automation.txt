@@ -1,11 +1,93 @@
 1. create one ec2 instance(ubuntu 24.04LTS) for Frontend App. install dependencies with shell script. Make Front end Golden AMI. 
-     a)Create Ansible Role 
+    1. trying manual installation Nodejs, nginx, React,
+       sudo apt update 
+       sudo apt install nodejs -y
+       sudo apt install npm -y
+       curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
+       source ~/.bashrc
+       sudo apt install nginx -y
 
+     a)Create Ansible Role 
+       1. git clone https://github.com/prasad-moru/mern-amazona.git
+          cd /home/ubuntu/mern-amazona/frontend
+          npm run build
+          sudo cp -r /home/ubuntu/mern-amazona/frontend/build/* /var/www/html/
 
 2. Create one ec2 instance(ubuntu 24.04LTS) for BackeEnd App. installe dependencies with Shell Script. Make Back End Golden AMI.
+       sudo apt update 
+       sudo apt install nodejs -y
+       sudo apt install npm -y
+       curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
+
+       sudo apt-get install gnupg
+       wget -qO- https://www.mongodb.org/static/pgp/server-8.0.asc | sudo tee /etc/apt/trusted.gpg.d/server-8.0.asc
+       echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+       sudo apt-get update
+       sudo apt-get install -y mongodb-mongosh
+      
+      this is for manual testing
+
+      this this working without passwd: mongosh "mongodb://mern-application.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017" --tls --tlsCAFile /home/ubuntu/global-bundle.pem
+       mongosh "mern-application.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017 --tls --tlsCAFile /home/ubuntu/global-bundle.pem --retryWrites=false --username mernapp --password devops#$2025"
+       mongosh "mongodb://mernapp:mernApp890Dev@mern-application.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017" \
+       --tls \
+      --tlsCAFile /home/ubuntu/global-bundle.pem \
+      --retryWrites=false
+      this is for adding to  backend application .env file.
+      mongodb://mernapp:devops#$2025@mern-application.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017/amazona?tls=true&tlsCAFile=/home/ubuntu/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false
+     MONGODB_URI=mongodb://mernapp:mernApp890Dev@mern-application.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017/amazona?tls=true&retryWrites=false
+
+     mongodb://mernapp:mernApp890Dev@mern-application.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017/amazona
+
+     mongodb+srv://prasadmoru:SRFUIQS4XePLov2P@cluster0.oehn3.mongodb.net/amazona
 
       a)Create Ansible Role 
 
+  
+  Commont utils instalations
+   sudo apt install net-tools -y 
 
-3. Document DB for Database.
+##################################################################
+3. Document DB for Database.  Amazon DocuementDB is working now. So We can Go with Amazon DocumentDB with Terraform Module.
 
+  Username :mernapp
+
+  passwd: mernApp890Dev
+
+rs0 [direct: primary] amazona> use admin
+
+db.auth("ecomuser", "Devops2025")
+
+rs0 [direct: primary] admin> use amazona
+
+show collections
+
+
+db.users.find().limit(5)  // First 5 documents
+#####################################################################
+==========================================
+
+backend server connection
+
+http://54.174.106.158:4000/api/seed
+
+
+
+frontend server accessing 
+
+http://3.83.136.178:3000/
+
+
+frontend with nginx configuration
+
+ # Enable the site
+sudo ln -s /etc/nginx/sites-available/amazona_mern.conf /etc/nginx/sites-enabled/amazona_mern.conf
+
+# Remove default site
+sudo rm /etc/nginx/sites-enabled/default
+
+# Test Nginx configuration
+sudo nginx -t
+
+# Restart Nginx
+sudo systemctl restart nginx
