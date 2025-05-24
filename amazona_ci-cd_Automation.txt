@@ -39,7 +39,7 @@
 
      mongodb://mernapp:mernApp890Dev@mern-application.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017/amazona
 
-     mongodb+srv://prasadmoru:SRFUIQS4XePLov2P@cluster0.oehn3.mongodb.net/amazona
+     mongodb+srv://prasadmoru:<passwd>@cluster0.oehn3.mongodb.net/amazona
 
       a)Create Ansible Role 
 
