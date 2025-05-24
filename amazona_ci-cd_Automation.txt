@@ -91,3 +91,38 @@ sudo nginx -t
 
 # Restart Nginx
 sudo systemctl restart nginx
+==============================================================================================
+
+Promt:
+
+AWS Services:
+
+   1.VPC
+   2.ec2
+   3.Application Loadbalancer
+   4.Autoscalling Group
+   5.DocumentDB
+   6.IAM
+
+   > Internet Gateway
+   > NATGateway
+   > VPC Designing
+     Two public Subnets
+       * ALB is created with these two public subnetes
+       * OpenVPN Ec2 instance setup into one public subnet
+     Three Private Subnetes  
+        * one Private subnet for frontend ec2 instance. 
+        * one private subnet for backend ec2 instances.
+     Two RouteTables
+       * one RouteTable is for associate with InternetGateway which public subnetes
+       * second RouteTable is for Private subnetes associate and for accessing Internet via NATGateway.   
+
+
+
+################
+Frontend Ec2 instance =====> ApiGateway =======> BackeEnd Ec2 instance ========> Mongodb(AWS DocuementDB)
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+mongosh --ssl --host ecomdatabase.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017 --sslCAFile /home/prasadmoru/global-bundle.pem --username ecomuser --password Devops2025
