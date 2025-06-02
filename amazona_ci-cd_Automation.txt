@@ -117,12 +117,168 @@ AWS Services:
        * one RouteTable is for associate with InternetGateway which public subnetes
        * second RouteTable is for Private subnetes associate and for accessing Internet via NATGateway.   
 
+total subnets = 6
+pub subnets  = 2 using it for ALB 
+private  subents = 4 using it for FE/BE/Database(DocuementDB)
+
+RouteTable = 2
+
+pub RT  = added routes with InternetGateway and associate public subnets (2)
+Private RT = added NATGateway and associate private subnets (4)
+
+
 
 
 ################
 Frontend Ec2 instance =====> ApiGateway =======> BackeEnd Ec2 instance ========> Mongodb(AWS DocuementDB)
 
+1 VPC   (mern-app)
+1 public subnet (mern-app-pub1)
+2 private subnetes for frontend and backend  (mern-app-private1)(mern-app-private2)
+2 private subnetes for database (DocuementDB) (mern-app-private3)(mern-app-private4)
+
+2 RouteTable
+1 InternetGateway
+1 NATGateway
+
+1 ALB 
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-mongosh --ssl --host ecomdatabase.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017 --sslCAFile /home/prasadmoru/global-bundle.pem --username ecomuser --password Devops2025
+mongosh --ssl --host mern-app-database.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017 --sslCAFile /home/prasadmoru/global-bundle.pem --username ecomuser --password Devops2025
+
+mongodb://mernapp:mernApp890Dev@mern-application.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017
+
+
+================================================================================
+
+OpenVPN setup
+
+ssh -i "github_actions.pem" root@44.196.118.127
+ssh -i "github_actions.pem" openvpnas@44.196.118.127
+openvpnas
+
+
+Type a password for the 'openvpn' account (if left blank, a random password will be generated):
+Please, remember this password FBUY6FAaEMNE
+
+You can login to the Admin Web UI as "openvpn" or specify
+a different user account to use for this purpose.
+
+You can now continue configuring OpenVPN Access Server by
+directing your Web browser to this URL:
+
+https://44.196.118.127:943/admin
+
+During normal operation, OpenVPN AS can be accessed via these URLs:
+Admin  UI: https://44.196.118.127:943/admin
+Client UI: https://44.196.118.127:943/
+To login please use the "openvpn" account with "FBUY6FAaEMNE" password.
+
+See the Release Notes for this release at:
+   https://openvpn.net/vpn-server-resources/release-notes/
+
+
+installing openvpn client form Internet
+https://openvpn.net/downloads/openvpn-connect-v3-windows.msi   
+
+
+while openvpn connted. accessing to DocumentDB from local machine. added 27017 port into DocuementDB Security Group. 
+
+mongosh "mongodb://ecomuser:Devops2025@mern-app-database.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017/?tls=true&tlsCAFile=/home/ubuntu/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
+
+create database name amazona
+
+use amazona
+
+mongodb://ecomuser:Devops2025@mern-app-database.cluster-cgjo8cuw2yyy.us-east-1.docdb.amazonaws.com:27017/?tls=true&tlsCAFile=/home/ubuntu/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Application Loadbalancer
+Creating Target Group,   
+
+Creating ALB adding TG with this ALB. 
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+frontend = S3 + CloudFront
+backend = Ec2 instance
+
+build static content is uploaded into s3 bucket. 
+Created CloudFront Distrubution 
+added two  orgins one is for S3   (default(*))  >>>>>> origin one
+Second one is ALB origin with /api/* path pattern >>>>>>> Origin Two
+
+for this mern application project avoiding s3 + CloudFront configuration.
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+1.creating new launch template with golden ami for the first time v1 is default.
+
+2. Alb should be creating into public subnetes at least two az and select two subents.
+
+3. Target Group should be registered with instances which are into private subnetes.
+
+4. manging security groups. create alb sg, instances sg, carefully allow traffic from internet.
+
+5. while new chages are required need to update into golden ami instance create AMI from that Golden AMI. 
+update with default version into launch template. as now these steps are into manually.
+
+6. Soon these manual steps should be autoamted with Packer, Ansible.
+=====================================================================================
+aws Services
+
+1.Autoscalling Group
+2.Launch template
+3.Application Loadbalancer
+4.AMI
+5.Security groups
+
+============================================================================================================
+NetWorking:
+============================================================================================================
+creating vpc
+creating subents
+   two public subnets into two availability zones.
+        these two public subnetes for OpenVPN instance and ALB
+        OpenVPN and ALB has Security Groups which should be allowing to Front and Backend app ec2 instances. 
+   four private subentes into two availability zones.
+        in these four subnetes two subnetes for Frontend application 
+        an other two subnetes is for BackeEnd Application.
+creating InternetGateway
+          and attached to vpc.
+creating NATGateway
+         while creating NATGateway choose one public subenet.
+Creating RouteTable public
+       routes local 0.0.0.0 and InternetGateway.
+       associates two public subnets.
+Creating RouteTable private
+        routes local 0.0.0.0 and NATGateway.
+        associates four private subnetes.
+
+==========================================
+Compute and Application Deployment Automation.
+
+Creating Golden AMI with prerequisites.
+   ubuntu 24.04LTS
+   arch x86_64
+   EBS Volume -- gp3 -- 10GB storage.
+Utils installations
+    * git
+    * net-tools
+    * ansible (created shellscript for this placed into github repo. anisble-inst-ubuntu.sh )
+    * Nodejs
+    * Nginx
+    * curl 
+    * wget
+    * nvm (curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
+       source ~/.bashrc)
+    * gnupg
+    *wget -qO- https://www.mongodb.org/static/pgp/server-8.0.asc | sudo tee /etc/apt/trusted.gpg.d/server-8.0.asc
+       echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+       sudo apt-get update
+       sudo apt-get install -y mongodb-mongosh
+
+

@@ -1,0 +1,157 @@
+# AWS VPC Setup Guide for MERN Application
+
+This document provides a clear step-by-step guide to set up the required AWS infrastructure.
+
+---
+
+## **Infrastructure Requirements**
+
+| Resource Type      | Details                              |
+| ------------------ | ------------------------------------ |
+| VPC                | mern-app                             |
+| Public Subnet      | mern-app-pub1                        |
+| Private Subnets    | mern-app-private1, mern-app-private2 |
+| Private DB Subnets | mern-app-private3, mern-app-private4 |
+| Route Tables       | Public & Private                     |
+| Internet Gateway   | 1 (mern-app-igw)                     |
+| NAT Gateway        | 1 (mern-app-nat)                     |
+
+---
+
+## **Step 1: Create VPC**
+
+1. Go to **VPC → Your VPCs → Create VPC**
+2. Name tag: `mern-app`
+3. IPv4 CIDR block: `10.0.0.0/16`
+4. Tenancy: default
+5. Click **Create VPC**
+
+---
+
+## **Step 2: Create Subnets**
+
+Go to **VPC → Subnets → Create Subnet** and create the following:
+
+| Subnet Name       | CIDR Block  | Availability Zone | Type          |
+| ----------------- | ----------- | ----------------- | ------------- |
+| mern-app-pub1     | 10.0.1.0/24 | ap-south-1a       | Public        |
+| mern-app-private1 | 10.0.2.0/24 | ap-south-1a       | Private FE/BE |
+| mern-app-private2 | 10.0.3.0/24 | ap-south-1b       | Private FE/BE |
+| mern-app-private3 | 10.0.4.0/24 | ap-south-1a       | Private DB    |
+| mern-app-private4 | 10.0.5.0/24 | ap-south-1b       | Private DB    |
+
+Make sure to:
+✅ Select `mern-app` VPC
+✅ Assign correct AZ
+✅ Set the CIDR block
+✅ Name it properly
+
+---
+
+## **Step 3: Create Internet Gateway**
+
+1. Go to **VPC → Internet Gateways → Create IGW**
+2. Name tag: `mern-app-igw`
+3. Click **Create**
+4. Attach to VPC → Select `mern-app`
+
+---
+
+## **Step 4: Create Route Tables**
+
+### Public Route Table
+
+1. Go to **VPC → Route Tables → Create Route Table**
+2. Name tag: `mern-app-public-rt`
+3. VPC: `mern-app`
+4. After creation → Edit Routes:
+
+   * Destination: `0.0.0.0/0`
+   * Target: `Internet Gateway → mern-app-igw`
+5. Associate: **mern-app-pub1**
+
+### Private Route Table
+
+1. Name tag: `mern-app-private-rt`
+2. VPC: `mern-app`
+3. After creation → Edit Routes:
+
+   * Destination: `0.0.0.0/0`
+   * Target: (After creating NAT Gateway)
+4. Associate: **mern-app-private1 to mern-app-private4**
+
+---
+
+## **Step 5: Create NAT Gateway**
+
+1. Go to **VPC → NAT Gateways → Create NAT Gateway**
+2. Subnet: `mern-app-pub1`
+3. Elastic IP: Allocate new
+4. Name: `mern-app-nat`
+5. Click **Create**
+
+---
+
+## **Step 6: Update Private Route Table**
+
+1. Go to **mern-app-private-rt → Routes → Edit**
+2. Add:
+
+   * Destination: `0.0.0.0/0`
+   * Target: `NAT Gateway → mern-app-nat`
+
+---
+
+## **Final Checks**
+
+✅ Ensure public subnet has **Auto-assign public IPv4** enabled.
+✅ Configure Security Groups to allow necessary traffic (SSH, HTTP, HTTPS, etc.).
+✅ When launching EC2 or DocumentDB, assign them to the correct subnet and ensure routing is set properly.
+
+---
+
+## **Optional**
+
+If you want Terraform scripts to automate this setup, let me know!
+
+
+✅ Steps to Make DocumentDB Work in Your Custom VPC
+1️⃣ Ensure your VPC has at least 2 private subnets in different AZs
+
+You already created mern-app-private3 and mern-app-private4. Perfect!
+
+2️⃣ Create a DocumentDB Subnet Group
+
+Go to RDS → Subnet Groups (yes, DocumentDB uses the same place as RDS).
+
+Click Create DB Subnet Group.
+
+Name: mern-app-docdb-subnet-group
+
+Description: Subnet group for mern-app DocumentDB
+
+VPC: Select your mern-app VPC
+
+Subnets: Select mern-app-private3 and mern-app-private4
+(ensure at least two AZs are covered)
+
+Click Create
+
+3️⃣ Create the DocumentDB Cluster
+
+Go to DocumentDB → Clusters → Create.
+
+Under Network & Security:
+
+Select your mern-app VPC.
+
+Select the newly created mern-app-docdb-subnet-group.
+
+Make sure the Security Group allows access from your backend (EC2 or service).
+
+⚠ Important Notes
+✅ No Public Access: DocumentDB must sit in private subnets; public access is not supported.
+
+✅ NAT Gateway Setup: If your cluster needs internet access (e.g., for updates), your private subnets must route through the NAT Gateway.
+
+✅ Security Group Rules:
