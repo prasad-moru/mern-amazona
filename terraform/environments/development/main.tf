@@ -1,5 +1,4 @@
-
-# environments/development/main.tf
+# environments/development/main.tf (FIXED)
 terraform {
   required_version = ">= 1.0"
   required_providers {
@@ -7,6 +6,16 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+  }
+}
+
+terraform {
+  backend "s3" {
+    bucket         = "mern-app-terraform-state"
+    key            = "dev/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "mern-app-terraform-lock"
+    encrypt        = true
   }
 }
 
@@ -22,17 +31,6 @@ provider "aws" {
   }
 }
 
-
-terraform {
-  backend "s3" {
-    bucket         = "mern-app-terraform-state"
-    key            = "dev/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "mern-app-terraform-lock"
-    encrypt        = true
-  }
-}
-
 locals {
   environment = "dev"
   name_prefix = "${var.project_name}-${local.environment}"
@@ -44,16 +42,16 @@ locals {
   }
 }
 
+# VPC Module (FIXED PATH)
 module "vpc" {
-  source = "./modules/vpc"
-  environment = "development"
-  project_name = "ERP-CRM"
-  region = "ap-south-1"
+  source = "../../modules/vpc"    # FIXED: Correct path
+  
+  environment = var.environment   # FIXED: Use var instead of hardcoded
+  project_name = var.project_name # FIXED: Use var instead of hardcoded
+  region = var.aws_region         # FIXED: Use var instead of hardcoded
 }
 
-
-# environments/development/ssm-integration.tf
-# Data source for latest Amazon Linux 2 AMI (for initial setup)
+# Data source for latest Amazon Linux 2 AMI
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
@@ -94,114 +92,68 @@ module "backend_ami_management" {
 }
 
 # ===============================================
-# LAUNCH TEMPLATES WITH SSM INTEGRATION
+# SECURITY GROUPS (ADDED MISSING ONES)
 # ===============================================
 
-# Frontend Launch Template with SSM
-module "frontend_launch_template_ssm" {
-  source = "../../modules/launch-template-ssm"
+# Frontend EC2 Security Group
+module "sg_frontend_ec2" {
+  source = "../../modules/security-groups"
 
-  template_name        = "erp-crm-frontend-lt"
-  template_description = "Launch template for frontend EC2 instances (SSM managed)"
-  ami_parameter_name   = module.frontend_ami_management.ami_parameter_name
-  instance_type        = var.frontend_instance_type
-  key_name            = var.key_pair_name
-  security_group_ids  = [module.sg_frontend_ec2.security_group_id]
-  
-  user_data = base64encode(templatefile("${path.module}/user-data/frontend-userdata.sh", {
-    environment = var.environment
-  }))
-
-  root_volume_size = 20
-  root_volume_type = "gp3"
-  ebs_optimized    = false
-  monitoring_enabled = true
-
+  vpc_id         = module.vpc.vpc_id
+  sg_name        = "sg-frontend-ec2"
+  sg_description = "Security group for frontend EC2 instances"
+  component_type = "ec2"
   environment    = var.environment
   project_name   = var.project_name
-  component_type = "frontend"
+
+  ingress_rules = [
+    {
+      from_port   = 3000
+      to_port     = 3000
+      protocol    = "tcp"
+      cidr_blocks = ["10.0.0.0/16"]  # Allow from VPC (will be updated when ALB SG is created)
+      description = "Frontend app port"
+    },
+    {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = ["10.0.0.0/16"]
+      description = "SSH from VPC"
+    }
+  ]
 }
 
-# Backend Launch Template with SSM
-module "backend_launch_template_ssm" {
-  source = "../../modules/launch-template-ssm"
+# Backend EC2 Security Group
+module "sg_backend_ec2" {
+  source = "../../modules/security-groups"
 
-  template_name        = "erp-crm-backend-lt"
-  template_description = "Launch template for backend EC2 instances (SSM managed)"
-  ami_parameter_name   = module.backend_ami_management.ami_parameter_name
-  instance_type        = var.backend_instance_type
-  key_name            = var.key_pair_name
-  security_group_ids  = [module.sg_backend_ec2.security_group_id]
-  
-  user_data = base64encode(templatefile("${path.module}/user-data/backend-userdata.sh", {
-    environment = var.environment
-  }))
-
-  root_volume_size = 30
-  root_volume_type = "gp3"
-  ebs_optimized    = false
-  monitoring_enabled = true
-
+  vpc_id         = module.vpc.vpc_id
+  sg_name        = "sg-backend-ec2"
+  sg_description = "Security group for backend EC2 instances"
+  component_type = "ec2"
   environment    = var.environment
   project_name   = var.project_name
-  component_type = "backend"
+
+  ingress_rules = [
+    {
+      from_port   = 8080
+      to_port     = 8080
+      protocol    = "tcp"
+      cidr_blocks = ["10.0.0.0/16"]  # Allow from VPC (will be updated when ALB SG is created)
+      description = "Backend API port"
+    },
+    {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = ["10.0.0.0/16"]
+      description = "SSH from VPC"
+    }
+  ]
 }
 
-# ===============================================
-# AUTO SCALING GROUPS (UPDATED TO USE SSM TEMPLATES)
-# ===============================================
-
-# Frontend Auto Scaling Group
-module "frontend_asg_ssm" {
-  source = "../../modules/autoscaling-group"
-
-  asg_name               = "erp-crm-frontend-asg"
-  launch_template_id     = module.frontend_launch_template_ssm.launch_template_id
-  launch_template_version = "$Latest"
-  
-  subnet_ids = module.vpc.frontend_subnet_ids
-  
-  min_size         = var.frontend_min_size
-  max_size         = var.frontend_max_size
-  desired_capacity = var.frontend_desired_capacity
-  
-  health_check_type         = "EC2"
-  health_check_grace_period = 300
-
-  environment    = var.environment
-  project_name   = var.project_name
-  component_type = "frontend"
-}
-
-# Backend Auto Scaling Group
-module "backend_asg_ssm" {
-  source = "../../modules/autoscaling-group"
-
-  asg_name               = "erp-crm-backend-asg"
-  launch_template_id     = module.backend_launch_template_ssm.launch_template_id
-  launch_template_version = "$Latest"
-  
-  subnet_ids = module.vpc.backend_subnet_ids
-  
-  min_size         = var.backend_min_size
-  max_size         = var.backend_max_size
-  desired_capacity = var.backend_desired_capacity
-  
-  health_check_type         = "EC2"
-  health_check_grace_period = 300
-
-  environment    = var.environment
-  project_name   = var.project_name
-  component_type = "backend"
-}
-
-
-# environments/development/alb-infrastructure.tf
-# ===============================================
-# ALB SECURITY GROUPS (UPDATED)
-# ===============================================
-
-# Public ALB Security Group (Frontend)
+# Public ALB Security Group
 module "sg_public_alb" {
   source = "../../modules/security-groups"
 
@@ -230,7 +182,7 @@ module "sg_public_alb" {
   ]
 }
 
-# Private ALB Security Group (Backend)
+# Private ALB Security Group
 module "sg_private_alb" {
   source = "../../modules/security-groups"
 
@@ -250,6 +202,60 @@ module "sg_private_alb" {
       description        = "Backend API port from frontend EC2"
     }
   ]
+}
+
+# ===============================================
+# LAUNCH TEMPLATES WITH SSM INTEGRATION
+# ===============================================
+
+# Frontend Launch Template with SSM
+module "frontend_launch_template" {
+  source = "../../modules/launch-template"    # Using existing module (which is actually SSM-enabled)
+
+  template_name        = "erp-crm-frontend-lt"
+  template_description = "Launch template for frontend EC2 instances (SSM managed)"
+  ami_parameter_name   = module.frontend_ami_management.ami_parameter_name
+  instance_type        = var.frontend_instance_type
+  key_name            = var.key_pair_name
+  security_group_ids  = [module.sg_frontend_ec2.security_group_id]
+  
+  user_data = base64encode(templatefile("${path.module}/user-data/frontend-userdata.sh", {
+    environment = var.environment
+  }))
+
+  root_volume_size = 20
+  root_volume_type = "gp3"
+  ebs_optimized    = false
+  monitoring_enabled = true
+
+  environment    = var.environment
+  project_name   = var.project_name
+  component_type = "frontend"
+}
+
+# Backend Launch Template with SSM
+module "backend_launch_template" {
+  source = "../../modules/launch-template"    # Using existing module (which is actually SSM-enabled)
+
+  template_name        = "erp-crm-backend-lt"
+  template_description = "Launch template for backend EC2 instances (SSM managed)"
+  ami_parameter_name   = module.backend_ami_management.ami_parameter_name
+  instance_type        = var.backend_instance_type
+  key_name            = var.key_pair_name
+  security_group_ids  = [module.sg_backend_ec2.security_group_id]
+  
+  user_data = base64encode(templatefile("${path.module}/user-data/backend-userdata.sh", {
+    environment = var.environment
+  }))
+
+  root_volume_size = 30
+  root_volume_type = "gp3"
+  ebs_optimized    = false
+  monitoring_enabled = true
+
+  environment    = var.environment
+  project_name   = var.project_name
+  component_type = "backend"
 }
 
 # ===============================================
@@ -407,15 +413,15 @@ resource "aws_lb_listener" "private_alb_http" {
 }
 
 # ===============================================
-# UPDATED AUTO SCALING GROUPS WITH TARGET GROUP INTEGRATION
+# AUTO SCALING GROUPS WITH ALB INTEGRATION (FIXED)
 # ===============================================
 
-# Updated Frontend ASG with Target Group
-module "frontend_asg_with_alb" {
+# Frontend Auto Scaling Group (SINGLE DEFINITION)
+module "frontend_asg" {
   source = "../../modules/autoscaling-group"
 
   asg_name               = "erp-crm-frontend-asg"
-  launch_template_id     = module.frontend_launch_template.launch_template_id
+  launch_template_id     = module.frontend_launch_template.launch_template_id    # FIXED REFERENCE
   launch_template_version = "$Latest"
   
   subnet_ids = module.vpc.frontend_subnet_ids
@@ -424,10 +430,10 @@ module "frontend_asg_with_alb" {
   max_size         = var.frontend_max_size
   desired_capacity = var.frontend_desired_capacity
   
-  health_check_type         = "ELB"  # Changed to ELB for ALB integration
+  health_check_type         = "ELB"  # ELB for ALB integration
   health_check_grace_period = 300
   
-  # THIS IS THE MAGIC - ALB Integration
+  # ALB Integration
   target_group_arns = [module.frontend_target_group.target_group_arn]
 
   environment    = var.environment
@@ -435,12 +441,12 @@ module "frontend_asg_with_alb" {
   component_type = "frontend"
 }
 
-# Updated Backend ASG with Target Group
-module "backend_asg_with_alb" {
+# Backend Auto Scaling Group (SINGLE DEFINITION)
+module "backend_asg" {
   source = "../../modules/autoscaling-group"
 
   asg_name               = "erp-crm-backend-asg"
-  launch_template_id     = module.backend_launch_template.launch_template_id
+  launch_template_id     = module.backend_launch_template.launch_template_id     # FIXED REFERENCE
   launch_template_version = "$Latest"
   
   subnet_ids = module.vpc.backend_subnet_ids
@@ -449,10 +455,10 @@ module "backend_asg_with_alb" {
   max_size         = var.backend_max_size
   desired_capacity = var.backend_desired_capacity
   
-  health_check_type         = "ELB"  # Changed to ELB for ALB integration
+  health_check_type         = "ELB"  # ELB for ALB integration
   health_check_grace_period = 300
   
-  # THIS IS THE MAGIC - ALB Integration
+  # ALB Integration
   target_group_arns = [module.backend_target_group.target_group_arn]
 
   environment    = var.environment
