@@ -1,17 +1,22 @@
-// modules/alb/variables.tf
-variable "name_prefix" {
-  description = "Prefix to use for naming resources"
-  type        = string
-  default     = "mern-app"
-}
-
-variable "vpc_id" {
-  description = "ID of the VPC"
+# modules/alb/variables.tf
+variable "alb_name" {
+  description = "Name of the Application Load Balancer"
   type        = string
 }
 
-variable "public_subnet_ids" {
-  description = "List of public subnet IDs"
+variable "internal" {
+  description = "Whether the ALB is internal or internet-facing"
+  type        = bool
+  default     = false
+}
+
+variable "subnet_ids" {
+  description = "List of subnet IDs for the ALB"
+  type        = list(string)
+}
+
+variable "security_group_ids" {
+  description = "List of security group IDs for the ALB"
   type        = list(string)
 }
 
@@ -21,20 +26,29 @@ variable "enable_deletion_protection" {
   default     = false
 }
 
-variable "create_https_listener" {
-  description = "Whether to create an HTTPS listener"
+variable "enable_http2" {
+  description = "Enable HTTP/2 on the ALB"
   type        = bool
-  default     = false
+  default     = true
 }
 
-variable "certificate_arn" {
-  description = "ARN of the SSL certificate to use for HTTPS"
+variable "idle_timeout" {
+  description = "Connection idle timeout in seconds"
+  type        = number
+  default     = 60
+}
+
+variable "environment" {
+  description = "Environment name"
   type        = string
-  default     = ""
 }
 
-variable "tags" {
-  description = "Tags to apply to all resources"
-  type        = map(string)
-  default     = {}
+variable "project_name" {
+  description = "Name of the project"
+  type        = string
+}
+
+variable "component_type" {
+  description = "Component type for tagging (e.g., frontend-alb, backend-alb)"
+  type        = string
 }

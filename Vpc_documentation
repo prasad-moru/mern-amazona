@@ -8,20 +8,20 @@ This document provides a clear step-by-step guide to set up the required AWS inf
 
 | Resource Type      | Details                              |
 | ------------------ | ------------------------------------ |
-| VPC                | mern-app                             |
-| Public Subnet      | mern-app-pub1                        |
-| Private Subnets    | mern-app-private1, mern-app-private2 |
-| Private DB Subnets | mern-app-private3, mern-app-private4 |
+| VPC                | erp-crm                             |
+| Public Subnet      | erp-crm-pub1                        |
+| Private Subnets    | erp-crm-private1, erp-crm-private2 |
+| Private DB Subnets | erp-crm-private3, erp-crm-private4 |
 | Route Tables       | Public & Private                     |
-| Internet Gateway   | 1 (mern-app-igw)                     |
-| NAT Gateway        | 1 (mern-app-nat)                     |
+| Internet Gateway   | 1 (erp-crm-igw)                     |
+| NAT Gateway        | 1 (erp-crm-nat)                     |
 
 ---
 
 ## **Step 1: Create VPC**
 
 1. Go to **VPC → Your VPCs → Create VPC**
-2. Name tag: `mern-app`
+2. Name tag: `erp-crm`
 3. IPv4 CIDR block: `10.0.0.0/16`
 4. Tenancy: default
 5. Click **Create VPC**
@@ -34,14 +34,15 @@ Go to **VPC → Subnets → Create Subnet** and create the following:
 
 | Subnet Name       | CIDR Block  | Availability Zone | Type          |
 | ----------------- | ----------- | ----------------- | ------------- |
-| mern-app-pub1     | 10.0.1.0/24 | ap-south-1a       | Public        |
-| mern-app-private1 | 10.0.2.0/24 | ap-south-1a       | Private FE/BE |
-| mern-app-private2 | 10.0.3.0/24 | ap-south-1b       | Private FE/BE |
-| mern-app-private3 | 10.0.4.0/24 | ap-south-1a       | Private DB    |
-| mern-app-private4 | 10.0.5.0/24 | ap-south-1b       | Private DB    |
+| erp-crm-pub1     | 10.0.1.0/24 | ap-south-1a       | Public        |
+| erp-crm-pub2     | 10.0.2.0/24 | ap-south-1a       | Public        |
+| erp-crm-private1 | 10.0.3.0/24 | ap-south-1a       | Private FE/BE |
+| erp-crm-private2 | 10.0.4.0/24 | ap-south-1b       | Private FE/BE |
+| erp-crm-private3 | 10.0.5.0/24 | ap-south-1a       | Private DB    |
+| erp-crm-private4 | 10.0.6.0/24 | ap-south-1b       | Private DB    |
 
 Make sure to:
-✅ Select `mern-app` VPC
+✅ Select `erp-crm` VPC
 ✅ Assign correct AZ
 ✅ Set the CIDR block
 ✅ Name it properly
@@ -51,9 +52,9 @@ Make sure to:
 ## **Step 3: Create Internet Gateway**
 
 1. Go to **VPC → Internet Gateways → Create IGW**
-2. Name tag: `mern-app-igw`
+2. Name tag: `erp-crm-igw`
 3. Click **Create**
-4. Attach to VPC → Select `mern-app`
+4. Attach to VPC → Select `erp-crm`
 
 ---
 
@@ -62,43 +63,44 @@ Make sure to:
 ### Public Route Table
 
 1. Go to **VPC → Route Tables → Create Route Table**
-2. Name tag: `mern-app-public-rt`
-3. VPC: `mern-app`
+2. Name tag: `erp-crm-public-rt`
+3. VPC: `erp-crm`
 4. After creation → Edit Routes:
 
    * Destination: `0.0.0.0/0`
-   * Target: `Internet Gateway → mern-app-igw`
-5. Associate: **mern-app-pub1**
+   * Target: `Internet Gateway → erp-crm-igw`
+5. Associate: **erp-crm-pub1**
+6. Associate: **erp-crm-pub2**
 
 ### Private Route Table
 
-1. Name tag: `mern-app-private-rt`
-2. VPC: `mern-app`
+1. Name tag: `erp-crm-private-rt`
+2. VPC: `erp-crm`
 3. After creation → Edit Routes:
 
    * Destination: `0.0.0.0/0`
    * Target: (After creating NAT Gateway)
-4. Associate: **mern-app-private1 to mern-app-private4**
+4. Associate: **erp-crm-private1 to erp-crm-private4**
 
 ---
 
 ## **Step 5: Create NAT Gateway**
 
 1. Go to **VPC → NAT Gateways → Create NAT Gateway**
-2. Subnet: `mern-app-pub1`
+2. Subnet: `erp-crm-pub1`
 3. Elastic IP: Allocate new
-4. Name: `mern-app-nat`
+4. Name: `erp-crm-nat`
 5. Click **Create**
 
 ---
 
 ## **Step 6: Update Private Route Table**
 
-1. Go to **mern-app-private-rt → Routes → Edit**
+1. Go to **erp-crm-private-rt → Routes → Edit**
 2. Add:
 
    * Destination: `0.0.0.0/0`
-   * Target: `NAT Gateway → mern-app-nat`
+   * Target: `NAT Gateway → erp-crm-nat`
 
 ---
 
@@ -106,52 +108,140 @@ Make sure to:
 
 ✅ Ensure public subnet has **Auto-assign public IPv4** enabled.
 ✅ Configure Security Groups to allow necessary traffic (SSH, HTTP, HTTPS, etc.).
-✅ When launching EC2 or DocumentDB, assign them to the correct subnet and ensure routing is set properly.
+✅ When launching EC2 assign them to the correct subnet and ensure routing is set properly.
 
 ---
 
 ## **Optional**
 
-If you want Terraform scripts to automate this setup, let me know!
-
-
-✅ Steps to Make DocumentDB Work in Your Custom VPC
-1️⃣ Ensure your VPC has at least 2 private subnets in different AZs
-
-You already created mern-app-private3 and mern-app-private4. Perfect!
-
-2️⃣ Create a DocumentDB Subnet Group
-
-Go to RDS → Subnet Groups (yes, DocumentDB uses the same place as RDS).
-
-Click Create DB Subnet Group.
-
-Name: mern-app-docdb-subnet-group
-
-Description: Subnet group for mern-app DocumentDB
-
-VPC: Select your mern-app VPC
-
-Subnets: Select mern-app-private3 and mern-app-private4
-(ensure at least two AZs are covered)
-
-Click Create
-
-3️⃣ Create the DocumentDB Cluster
-
-Go to DocumentDB → Clusters → Create.
-
-Under Network & Security:
-
-Select your mern-app VPC.
-
-Select the newly created mern-app-docdb-subnet-group.
 
 Make sure the Security Group allows access from your backend (EC2 or service).
 
 ⚠ Important Notes
-✅ No Public Access: DocumentDB must sit in private subnets; public access is not supported.
+✅ No Public Access: mongodb ec2 instance must sit in private subnets; public access is not supported.
 
 ✅ NAT Gateway Setup: If your cluster needs internet access (e.g., for updates), your private subnets must route through the NAT Gateway.
 
 ✅ Security Group Rules:
+
+################################################################################################################################
+
+Create VPC module with below given details. 
+1. Go to **VPC → Your VPCs → Create VPC**
+2. Name tag: `erp-crm`
+3. IPv4 CIDR block: `10.0.0.0/16`
+4. Tenancy: default
+
+| Subnet Name       | CIDR Block  | Availability Zone | Type          |
+| ----------------- | ----------- | ----------------- | ------------- |
+| erp-crm-public1     | 10.0.1.0/24 | ap-south-1a       | Public        |
+| erp-crm-public2     | 10.0.2.0/24 | ap-south-1b       | Public        |
+| erp-crm-private1 | 10.0.3.0/24 | ap-south-1a       | Private FE |
+| erp-crm-private2 | 10.0.4.0/24 | ap-south-1b       | Private FE |
+| erp-crm-private3 | 10.0.5.0/24 | ap-south-1a       | Private BE   |
+| erp-crm-private4 | 10.0.6.0/24 | ap-south-1b       | Private BE    |
+| erp-crm-private3 | 10.0.7.0/24 | ap-south-1a       | Private DB    |
+| erp-crm-private4 | 10.0.8.0/24 | ap-south-1b       | Private DB    |
+Make sure to:
+✅ Select `erp-crm` VPC
+✅ Assign correct AZ
+✅ Set the CIDR block
+✅ Name it properly
+1. Go to **VPC → Internet Gateways → Create IGW**
+2. Name tag: `erp-crm-igw`
+3. Click **Create**
+4. Attach to VPC → Select `erp-crm`
+## **Step 4: Create Route Tables**
+### Public Route Table
+1. Go to **VPC → Route Tables → Create Route Table**
+2. Name tag: `erp-crm-public-rt`
+3. VPC: `erp-crm`
+4. After creation → Edit Routes:
+   * Destination: `0.0.0.0/0`
+   * Target: `Internet Gateway → erp-crm-igw`
+5. Associate: **erp-crm-pub1**
+6. Associate: **erp-crm-pub2**
+### Private Route Table
+1. Name tag: `erp-crm-private-rt`
+2. VPC: `erp-crm`
+3. After creation → Edit Routes:
+   * Destination: `0.0.0.0/0`
+   * Target: (After creating NAT Gateway)
+4. Associate: **erp-crm-private1 to erp-crm-private4**
+---
+## **Step 5: Create NAT Gateway**
+1. Go to **VPC → NAT Gateways → Create NAT Gateway**
+2. Subnet: `erp-crm-pub1`
+3. Elastic IP: Allocate new
+4. Name: `erp-crm-nat`
+5. Click **Create**
+---
+## **Step 6: Update Private Route Table**
+1. Go to **erp-crm-private-rt → Routes → Edit**
+2. Add:
+   * Destination: `0.0.0.0/0`
+   * Target: `NAT Gateway → erp-crm-nat`
+---
+## **Final Checks**
+✅ Ensure public subnet has **Auto-assign public IPv4** enabled.
+✅ Configure Security Groups to allow necessary traffic (SSH, HTTP, HTTPS, etc.).
+✅ When launching EC2 assign them to the correct subnet and ensure routing is set properly.
+create tags for all resources.
+"Component"   = "vpc"  ===> use for which component is create ex IGW add Internetgateway like this add every component
+"Environment" = "development"
+"Name"        = "erp-crm-networking"
+"Project"     = "ERP-CRM"
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+i want to create frontend ec2 server(with launch template) and backend ec2 server(with launch template) as modules separtaly because in future i want to manage frontend instance backend instance deployment separatly. 
+
+using 
+one launch template and one autoscalling group is for frontend ec2 instance
+additionally one security group is for frontend ec2 instance
+this frontend should be creating into erp-crm-private1, erp-crm-private2 subnets
+one lanuch tempalte and one autoscalling group is for backend ec2 instance
+additionally one security group is for backend ec2 instance 
+this backend should be creating into erp-crm-private3, erp-crm-private4 subnets
+create security group module and use that for when it required like 
+i wanto you add pem key also while lanuch template creating.
+
+one Launch Template module use it into development/main.tf output.tf vairable.tf
+use this module for creating frontend servers, backend servers, 
+
+one AutoScaling Group module use it into development/main.tf output.tf vairable.tf
+use this module for creating frontend servers, backend server
+
+one Security Group module use it for where it required
+
+modules:  
+ 1. Security Groups
+ 2. Launch Tempalte
+ 3. Autoscalling Groups
+
+make tagging as like vpc components
+
+one Autoscaling group
+Layer	         SG Name	             IngressFrom	                                 Purpose
+ALB1	         sg_alb_frontend	0.0.0.0/0 on 80/443	                      Public traffic to frontend
+Frontend EC2	sg_frontend_ec2	sg_alb_frontend on app port (e.g., 3000)	 Allow traffic only from ALB
+ALB2	         sg_alb_backend	   sg_frontend_ec2 on API port (e.g., 8080)	 Allow frontend → backend calls
+Backend EC2	   sg_backend_ec2	   sg_alb_backend on port (e.g., 8080)       	 Backend traffic from internal ALB
+Database EC2	sg_database	      sg_backend_ec2 on port (e.g., 27017)	          Only backend app can access DB
+
+
+For immutable infrastrcuture (new feature releases we using packer to build new ami and updated with launchtempalte new version so for this i want to add ssm can you help to how ssm is working for this deployemnt automation.)
+
+
+for ALB and TargetGroups
+one ALB module
+using it for creating public ALB with two public subnets,
+one Target group module 
+using it for creating front end application and backend application server which are into erp-crm-private1, erp-crm-private2 
+Q. how it is configured with ASG, if in case server are terminated and new ones are created due to autoscaling triggers how automatically attaching to alb?
+
+create private alb for backend servers which are into erp-crm-private3, erp-crm-private4 subnets , it will be into registered with 
+backend application target group server.
+
+create security groups for two albs from which we are created securitygroup module.
