@@ -158,3 +158,105 @@ output "infrastructure_summary" {
     }
   }
 }
+
+
+# environments/development/outputs.tf (ADD MongoDB outputs)
+# Add these MongoDB outputs to your existing outputs.tf
+
+# MongoDB Server Outputs
+output "mongodb_server" {
+  description = "MongoDB server details"
+  value = {
+    instance_id     = module.mongodb_server.instance_id
+    private_ip      = module.mongodb_server.private_ip
+    private_dns     = module.mongodb_server.private_dns
+    current_ami_id  = module.mongodb_server.current_ami_id
+    data_volume_id  = module.mongodb_server.data_volume_id
+    connection_info = "Use private IP: ${module.mongodb_server.private_ip}:27017"
+  }
+  sensitive = true
+}
+
+# Updated SSM Parameters (ADD MongoDB parameters)
+output "ssm_parameters" {
+  description = "SSM parameter names for AMI management"
+  value = {
+    frontend_ami_id = module.frontend_ami_management.ami_parameter_name
+    frontend_version = module.frontend_ami_management.ami_version_parameter_name
+    frontend_previous_ami = module.frontend_ami_management.previous_ami_parameter_name
+    backend_ami_id = module.backend_ami_management.ami_parameter_name
+    backend_version = module.backend_ami_management.ami_version_parameter_name
+    backend_previous_ami = module.backend_ami_management.previous_ami_parameter_name
+    # ADD MONGODB PARAMETERS
+    mongodb_ami_id = module.mongodb_ami_management.mongodb_ami_parameter_name
+    mongodb_version = module.mongodb_ami_management.mongodb_ami_version_parameter_name
+    mongodb_previous_ami = module.mongodb_ami_management.mongodb_previous_ami_parameter_name
+  }
+}
+
+# Updated Infrastructure Summary (ADD MongoDB)
+output "infrastructure_summary" {
+  description = "Complete infrastructure summary"
+  value = {
+    # Network
+    vpc_id              = module.vpc.vpc_id
+    frontend_subnets    = module.vpc.frontend_subnet_ids
+    backend_subnets     = module.vpc.backend_subnet_ids
+    database_subnets    = module.vpc.database_subnet_ids
+    
+    # Load Balancers
+    frontend_alb_dns = module.public_alb.alb_dns_name
+    backend_alb_dns  = module.private_alb.alb_dns_name
+    
+    # Auto Scaling Groups
+    frontend_asg = module.frontend_asg.autoscaling_group_name
+    backend_asg  = module.backend_asg.autoscaling_group_name
+    
+    # MongoDB Server
+    mongodb_instance_id = module.mongodb_server.instance_id
+    mongodb_private_ip  = module.mongodb_server.private_ip
+    
+    # SSM Parameters
+    ssm_parameters = {
+      frontend_ami = module.frontend_ami_management.ami_parameter_name
+      backend_ami  = module.backend_ami_management.ami_parameter_name
+      mongodb_ami  = module.mongodb_ami_management.mongodb_ami_parameter_name
+    }
+  }
+}
+
+# environments/development/outputs.tf (ADD OpenVPN outputs)
+# Add these OpenVPN outputs to your existing outputs.tf
+
+# OpenVPN Server Outputs
+output "openvpn_server" {
+  description = "OpenVPN server details"
+  value = {
+    instance_id       = module.openvpn_server.instance_id
+    public_ip         = module.openvpn_server.public_ip
+    elastic_ip        = module.openvpn_server.elastic_ip
+    private_ip        = module.openvpn_server.private_ip
+    admin_console_url = module.openvpn_server.admin_console_url
+    client_web_url    = module.openvpn_server.client_web_url
+    ssh_command       = module.openvpn_server.connection_info.ssh_command
+  }
+}
+
+# VPN Access Information
+output "vpn_access_info" {
+  description = "Information about VPN access to private resources"
+  value = {
+    admin_console     = module.openvpn_server.admin_console_url
+    client_download   = module.openvpn_server.client_web_url
+    vpn_server_ip     = module.openvpn_server.public_ip
+    
+    # Private resources accessible via VPN
+    accessible_resources = {
+      frontend_instances = "10.0.3.x, 10.0.4.x (ports: 3000, 22)"
+      backend_instances  = "10.0.5.x, 10.0.6.x (ports: 8080, 22)"
+      mongodb_server     = "${module.mongodb_server.private_ip} (ports: 27017, 22)"
+      frontend_alb       = module.public_alb.alb_dns_name
+      backend_alb        = module.private_alb.alb_dns_name
+    }
+  }
+}

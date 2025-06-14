@@ -11,9 +11,9 @@ terraform {
 
 terraform {
   backend "s3" {
-    bucket         = "mern-app-terraform-state"
+    bucket         = "erp-crm-terraform-state"
     key            = "dev/terraform.tfstate"
-    region         = "us-east-1"
+    region         = "ap-east-1"
     dynamodb_table = "mern-app-terraform-lock"
     encrypt        = true
   }
@@ -217,11 +217,12 @@ module "frontend_launch_template" {
   ami_parameter_name   = module.frontend_ami_management.ami_parameter_name
   instance_type        = var.frontend_instance_type
   key_name            = var.key_pair_name
-  security_group_ids  = [module.sg_frontend_ec2.security_group_id]
+  security_group_ids  = [
+    module.sg_frontend_ec2.security_group_id,
+    module.sg_frontend_vpn_access.security_group_id            
+  ]
   
-  user_data = base64encode(templatefile("${path.module}/user-data/frontend-userdata.sh", {
-    environment = var.environment
-  }))
+  user_data = ""
 
   root_volume_size = 20
   root_volume_type = "gp3"
@@ -242,11 +243,12 @@ module "backend_launch_template" {
   ami_parameter_name   = module.backend_ami_management.ami_parameter_name
   instance_type        = var.backend_instance_type
   key_name            = var.key_pair_name
-  security_group_ids  = [module.sg_backend_ec2.security_group_id]
+  security_group_ids  = [
+    module.sg_backend_ec2.security_group_id,
+    module.sg_frontend_vpn_access.security_group_id
+  ]
   
-  user_data = base64encode(templatefile("${path.module}/user-data/backend-userdata.sh", {
-    environment = var.environment
-  }))
+  user_data = ""
 
   root_volume_size = 30
   root_volume_type = "gp3"
@@ -464,4 +466,192 @@ module "backend_asg" {
   environment    = var.environment
   project_name   = var.project_name
   component_type = "backend"
+}
+
+
+# environments/development/main.tf (ADD MongoDB integration)
+# Add this to your existing main.tf file
+
+# ===============================================
+# MONGODB AMI MANAGEMENT (ADD THIS SECTION)
+# ===============================================
+
+# MongoDB AMI Management
+module "mongodb_ami_management" {
+  source = "../../modules/ssm-ami-management"
+
+  environment    = var.environment
+  project_name   = var.project_name
+  component_name = "mongodb"
+  initial_ami_id = data.aws_ami.amazon_linux.id
+}
+
+# ===============================================
+# MONGODB SERVER (ADD THIS SECTION)
+# ===============================================
+
+# MongoDB Server Instance
+module "mongodb_server" {
+  source = "../../modules/mongodb-server"
+
+  instance_name      = "erp-crm-mongodb"
+  instance_type      = var.mongodb_instance_type
+  ami_parameter_name = module.mongodb_ami_management.mongodb_ami_parameter_name
+  subnet_id          = module.vpc.database_subnet_ids[0]  # erp-crm-private5
+  security_group_ids = [
+    module.sg_database.security_group_id,
+    module.sg_database_vpn_access.security_group_id    
+  ]
+  key_name           = var.key_pair_name
+
+  # Storage Configuration
+  root_volume_size  = 30
+  data_volume_size  = var.mongodb_data_volume_size
+  data_volume_type  = "gp3"
+  data_volume_iops  = 3000
+
+  # Monitoring and Backup
+  enable_monitoring       = true
+  enable_backup          = true
+  backup_retention_days  = 7
+
+  environment  = var.environment
+  project_name = var.project_name
+}
+
+# environments/development/main.tf (ADD OpenVPN section)
+# Add this OpenVPN section to your existing main.tf
+
+# ===============================================
+# OPENVPN SECURITY GROUPS (ADD THIS SECTION)
+# ===============================================
+
+# OpenVPN Server Security Group
+module "sg_openvpn" {
+  source = "../../modules/security-groups"
+
+  vpc_id         = module.vpc.vpc_id
+  sg_name        = "sg-openvpn-server"
+  sg_description = "Security group for OpenVPN server"
+  component_type = "vpn"
+  environment    = var.environment
+  project_name   = var.project_name
+
+  ingress_rules = [
+    {
+      from_port   = 1194
+      to_port     = 1194
+      protocol    = "udp"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "OpenVPN UDP access from anywhere"
+    },
+    {
+      from_port   = 443
+      to_port     = 443
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "OpenVPN TCP access from anywhere"
+    },
+    {
+      from_port   = 943
+      to_port     = 943
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "OpenVPN Admin Console access"
+    },
+    {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [var.admin_ssh_cidr]
+      description = "SSH access for administration"
+    }
+  ]
+}
+
+# VPN Client Access Security Group for Frontend
+module "sg_frontend_vpn_access" {
+  source = "../../modules/security-groups"
+
+  vpc_id         = module.vpc.vpc_id
+  sg_name        = "sg-frontend-vpn-access"
+  sg_description = "Allow VPN clients to access frontend instances"
+  component_type = "ec2"
+  environment    = var.environment
+  project_name   = var.project_name
+
+  ingress_rules = [
+    {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [var.vpn_client_network]
+      description = "SSH from VPN clients"
+    },
+    {
+      from_port   = 3000
+      to_port     = 3000
+      protocol    = "tcp"
+      cidr_blocks = [var.vpn_client_network]
+      description = "Frontend app access from VPN clients"
+    }
+  ]
+}
+
+# VPN Client Access Security Group for Backend
+module "sg_backend_vpn_access" {
+  source = "../../modules/security-groups"
+
+  vpc_id         = module.vpc.vpc_id
+  sg_name        = "sg-backend-vpn-access"
+  sg_description = "Allow VPN clients to access backend instances"
+  component_type = "ec2"
+  environment    = var.environment
+  project_name   = var.project_name
+
+  ingress_rules = [
+    {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [var.vpn_client_network]
+      description = "SSH from VPN clients"
+    },
+    {
+      from_port   = 8080
+      to_port     = 8080
+      protocol    = "tcp"
+      cidr_blocks = [var.vpn_client_network]
+      description = "Backend API access from VPN clients"
+    }
+  ]
+}
+
+# VPN Client Access Security Group for Database
+module "sg_database_vpn_access" {
+  source = "../../modules/security-groups"
+
+  vpc_id         = module.vpc.vpc_id
+  sg_name        = "sg-database-vpn-access"
+  sg_description = "Allow VPN clients to access database instances"
+  component_type = "database"
+  environment    = var.environment
+  project_name   = var.project_name
+
+  ingress_rules = [
+    {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [var.vpn_client_network]
+      description = "SSH from VPN clients"
+    },
+    {
+      from_port   = 27017
+      to_port     = 27017
+      protocol    = "tcp"
+      cidr_blocks = [var.vpn_client_network]
+      description = "MongoDB access from VPN clients"
+    }
+  ]
 }
